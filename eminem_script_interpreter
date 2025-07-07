@@ -1,0 +1,785 @@
+import re
+import sys
+from typing import Dict, List, Any, Optional, Union
+from enum import Enum
+
+class TokenType(Enum):
+    # Literals
+    STRING = "STRING"
+    NUMBER = "NUMBER"
+    BOOLEAN = "BOOLEAN"
+    
+    # Keywords
+    SPIT = "SPIT"          # variable declaration
+    VERSE = "VERSE"        # function
+    CYPHER = "CYPHER"      # main function
+    FLOW = "FLOW"          # print
+    LISTEN = "LISTEN"      # input
+    BATTLE = "BATTLE"      # if
+    VERSUS = "VERSUS"      # else if
+    DEFEAT = "DEFEAT"      # else
+    FREESTYLE = "FREESTYLE" # loop
+    RETURN = "RETURN"
+    REAL = "REAL"          # true
+    FAKE = "FAKE"          # false
+    VOID = "VOID"          # null
+    
+    # Operators
+    PLUS = "PLUS"
+    MINUS = "MINUS"
+    MULTIPLY = "MULTIPLY"
+    DIVIDE = "DIVIDE"
+    EQUALS = "EQUALS"
+    ASSIGN = "ASSIGN"
+    GREATER = "GREATER"
+    LESS = "LESS"
+    
+    # Punctuation
+    LPAREN = "LPAREN"
+    RPAREN = "RPAREN"
+    LBRACE = "LBRACE"
+    RBRACE = "RBRACE"
+    COMMA = "COMMA"
+    SEMICOLON = "SEMICOLON"
+    
+    # Identifiers
+    IDENTIFIER = "IDENTIFIER"
+    
+    # Special
+    NEWLINE = "NEWLINE"
+    EOF = "EOF"
+
+class Token:
+    def __init__(self, type_: TokenType, value: str, line: int = 1):
+        self.type = type_
+        self.value = value
+        self.line = line
+    
+    def __repr__(self):
+        return f"Token({self.type}, {self.value!r})"
+
+class Lexer:
+    def __init__(self, text: str):
+        self.text = text
+        self.pos = 0
+        self.line = 1
+        self.keywords = {
+            'spit': TokenType.SPIT,
+            'verse': TokenType.VERSE,
+            'cypher': TokenType.CYPHER,
+            'flow': TokenType.FLOW,
+            'listen': TokenType.LISTEN,
+            'battle': TokenType.BATTLE,
+            'versus': TokenType.VERSUS,
+            'defeat': TokenType.DEFEAT,
+            'freestyle': TokenType.FREESTYLE,
+            'return': TokenType.RETURN,
+            'real': TokenType.REAL,
+            'fake': TokenType.FAKE,
+            'void': TokenType.VOID,
+        }
+    
+    def current_char(self) -> Optional[str]:
+        if self.pos >= len(self.text):
+            return None
+        return self.text[self.pos]
+    
+    def peek_char(self) -> Optional[str]:
+        peek_pos = self.pos + 1
+        if peek_pos >= len(self.text):
+            return None
+        return self.text[peek_pos]
+    
+    def advance(self):
+        if self.pos < len(self.text) and self.text[self.pos] == '\n':
+            self.line += 1
+        self.pos += 1
+    
+    def skip_whitespace(self):
+        while self.current_char() and self.current_char() in ' \t\r':
+            self.advance()
+    
+    def skip_comment(self):
+        if self.current_char() == '/' and self.peek_char() == '/':
+            while self.current_char() and self.current_char() != '\n':
+                self.advance()
+    
+    def read_string(self) -> str:
+        quote_char = self.current_char()
+        self.advance()  # Skip opening quote
+        
+        value = ""
+        while self.current_char() and self.current_char() != quote_char:
+            if self.current_char() == '\\':
+                self.advance()
+                if self.current_char() == 'n':
+                    value += '\n'
+                elif self.current_char() == 't':
+                    value += '\t'
+                elif self.current_char() == '\\':
+                    value += '\\'
+                elif self.current_char() == quote_char:
+                    value += quote_char
+                else:
+                    value += self.current_char()
+            else:
+                value += self.current_char()
+            self.advance()
+        
+        if self.current_char() == quote_char:
+            self.advance()  # Skip closing quote
+        
+        return value
+    
+    def read_number(self) -> str:
+        value = ""
+        while self.current_char() and (self.current_char().isdigit() or self.current_char() == '.'):
+            value += self.current_char()
+            self.advance()
+        return value
+    
+    def read_identifier(self) -> str:
+        value = ""
+        while (self.current_char() and 
+               (self.current_char().isalnum() or self.current_char() == '_')):
+            value += self.current_char()
+            self.advance()
+        return value
+    
+    def tokenize(self) -> List[Token]:
+        tokens = []
+        
+        while self.current_char():
+            self.skip_whitespace()
+            
+            if not self.current_char():
+                break
+            
+            # Comments
+            if self.current_char() == '/' and self.peek_char() == '/':
+                self.skip_comment()
+                continue
+            
+            # Newlines
+            if self.current_char() == '\n':
+                tokens.append(Token(TokenType.NEWLINE, '\n', self.line))
+                self.advance()
+                continue
+            
+            # Strings
+            if self.current_char() in '"\'':
+                tokens.append(Token(TokenType.STRING, self.read_string(), self.line))
+                continue
+            
+            # Numbers
+            if self.current_char().isdigit():
+                tokens.append(Token(TokenType.NUMBER, self.read_number(), self.line))
+                continue
+            
+            # Identifiers and keywords
+            if self.current_char().isalpha() or self.current_char() == '_':
+                identifier = self.read_identifier()
+                token_type = self.keywords.get(identifier, TokenType.IDENTIFIER)
+                tokens.append(Token(token_type, identifier, self.line))
+                continue
+            
+            # Single character tokens
+            char = self.current_char()
+            if char == '+':
+                tokens.append(Token(TokenType.PLUS, char, self.line))
+            elif char == '-':
+                tokens.append(Token(TokenType.MINUS, char, self.line))
+            elif char == '*':
+                tokens.append(Token(TokenType.MULTIPLY, char, self.line))
+            elif char == '/':
+                tokens.append(Token(TokenType.DIVIDE, char, self.line))
+            elif char == '=':
+                if self.peek_char() == '=':
+                    tokens.append(Token(TokenType.EQUALS, '==', self.line))
+                    self.advance()
+                else:
+                    tokens.append(Token(TokenType.ASSIGN, char, self.line))
+            elif char == '>':
+                tokens.append(Token(TokenType.GREATER, char, self.line))
+            elif char == '<':
+                tokens.append(Token(TokenType.LESS, char, self.line))
+            elif char == '(':
+                tokens.append(Token(TokenType.LPAREN, char, self.line))
+            elif char == ')':
+                tokens.append(Token(TokenType.RPAREN, char, self.line))
+            elif char == '{':
+                tokens.append(Token(TokenType.LBRACE, char, self.line))
+            elif char == '}':
+                tokens.append(Token(TokenType.RBRACE, char, self.line))
+            elif char == ',':
+                tokens.append(Token(TokenType.COMMA, char, self.line))
+            elif char == ';':
+                tokens.append(Token(TokenType.SEMICOLON, char, self.line))
+            else:
+                raise SyntaxError(f"Unexpected character '{char}' at line {self.line}")
+            
+            self.advance()
+        
+        tokens.append(Token(TokenType.EOF, '', self.line))
+        return tokens
+
+class ASTNode:
+    pass
+
+class Program(ASTNode):
+    def __init__(self, statements: List[ASTNode]):
+        self.statements = statements
+
+class VariableDeclaration(ASTNode):
+    def __init__(self, name: str, value: ASTNode):
+        self.name = name
+        self.value = value
+
+class FunctionDeclaration(ASTNode):
+    def __init__(self, name: str, params: List[str], body: List[ASTNode]):
+        self.name = name
+        self.params = params
+        self.body = body
+
+class Assignment(ASTNode):
+    def __init__(self, name: str, value: ASTNode):
+        self.name = name
+        self.value = value
+
+class BinaryOp(ASTNode):
+    def __init__(self, left: ASTNode, op: str, right: ASTNode):
+        self.left = left
+        self.op = op
+        self.right = right
+
+class UnaryOp(ASTNode):
+    def __init__(self, op: str, operand: ASTNode):
+        self.op = op
+        self.operand = operand
+
+class FunctionCall(ASTNode):
+    def __init__(self, name: str, args: List[ASTNode]):
+        self.name = name
+        self.args = args
+
+class If(ASTNode):
+    def __init__(self, condition: ASTNode, then_body: List[ASTNode], else_body: Optional[List[ASTNode]] = None):
+        self.condition = condition
+        self.then_body = then_body
+        self.else_body = else_body
+
+class Return(ASTNode):
+    def __init__(self, value: Optional[ASTNode] = None):
+        self.value = value
+
+class Literal(ASTNode):
+    def __init__(self, value: Any):
+        self.value = value
+
+class Identifier(ASTNode):
+    def __init__(self, name: str):
+        self.name = name
+
+class Parser:
+    def __init__(self, tokens: List[Token]):
+        self.tokens = tokens
+        self.pos = 0
+    
+    def current_token(self) -> Token:
+        if self.pos >= len(self.tokens):
+            return self.tokens[-1]  # EOF token
+        return self.tokens[self.pos]
+    
+    def advance(self):
+        if self.pos < len(self.tokens) - 1:
+            self.pos += 1
+    
+    def skip_newlines(self):
+        while self.current_token().type == TokenType.NEWLINE:
+            self.advance()
+    
+    def expect(self, token_type: TokenType) -> Token:
+        token = self.current_token()
+        if token.type != token_type:
+            raise SyntaxError(f"Expected {token_type}, got {token.type} at line {token.line}")
+        self.advance()
+        return token
+    
+    def parse(self) -> Program:
+        statements = []
+        
+        while self.current_token().type != TokenType.EOF:
+            self.skip_newlines()
+            if self.current_token().type == TokenType.EOF:
+                break
+            
+            stmt = self.parse_statement()
+            if stmt:
+                statements.append(stmt)
+        
+        return Program(statements)
+    
+    def parse_statement(self) -> Optional[ASTNode]:
+        token = self.current_token()
+        
+        if token.type == TokenType.SPIT:
+            return self.parse_variable_declaration()
+        elif token.type == TokenType.VERSE or token.type == TokenType.CYPHER:
+            return self.parse_function_declaration()
+        elif token.type == TokenType.FLOW:
+            return self.parse_flow_statement()
+        elif token.type == TokenType.BATTLE:
+            return self.parse_if_statement()
+        elif token.type == TokenType.RETURN:
+            return self.parse_return_statement()
+        elif token.type == TokenType.IDENTIFIER:
+            # Could be assignment or function call
+            if self.peek_token().type == TokenType.ASSIGN:
+                return self.parse_assignment()
+            else:
+                return self.parse_expression_statement()
+        else:
+            return self.parse_expression_statement()
+    
+    def peek_token(self) -> Token:
+        if self.pos + 1 >= len(self.tokens):
+            return self.tokens[-1]
+        return self.tokens[self.pos + 1]
+    
+    def parse_variable_declaration(self) -> VariableDeclaration:
+        self.expect(TokenType.SPIT)
+        name = self.expect(TokenType.IDENTIFIER).value
+        self.expect(TokenType.ASSIGN)
+        value = self.parse_expression()
+        return VariableDeclaration(name, value)
+    
+    def parse_function_declaration(self) -> FunctionDeclaration:
+        is_cypher = self.current_token().type == TokenType.CYPHER
+        self.advance()  # Skip VERSE or CYPHER
+        
+        if is_cypher:
+            name = "cypher"
+            params = []
+        else:
+            name = self.expect(TokenType.IDENTIFIER).value
+            self.expect(TokenType.LPAREN)
+            params = []
+            
+            if self.current_token().type != TokenType.RPAREN:
+                params.append(self.expect(TokenType.IDENTIFIER).value)
+                while self.current_token().type == TokenType.COMMA:
+                    self.advance()
+                    params.append(self.expect(TokenType.IDENTIFIER).value)
+            
+            self.expect(TokenType.RPAREN)
+        
+        self.expect(TokenType.LBRACE)
+        body = []
+        
+        while self.current_token().type != TokenType.RBRACE:
+            self.skip_newlines()
+            if self.current_token().type == TokenType.RBRACE:
+                break
+            stmt = self.parse_statement()
+            if stmt:
+                body.append(stmt)
+        
+        self.expect(TokenType.RBRACE)
+        return FunctionDeclaration(name, params, body)
+    
+    def parse_assignment(self) -> Assignment:
+        name = self.expect(TokenType.IDENTIFIER).value
+        self.expect(TokenType.ASSIGN)
+        value = self.parse_expression()
+        return Assignment(name, value)
+    
+    def parse_flow_statement(self) -> FunctionCall:
+        self.expect(TokenType.FLOW)
+        args = []
+        
+        if self.current_token().type != TokenType.NEWLINE and self.current_token().type != TokenType.EOF:
+            args.append(self.parse_expression())
+            while self.current_token().type == TokenType.COMMA:
+                self.advance()
+                args.append(self.parse_expression())
+        
+        return FunctionCall("flow", args)
+    
+    def parse_if_statement(self) -> If:
+        self.expect(TokenType.BATTLE)
+        self.expect(TokenType.LPAREN)
+        condition = self.parse_expression()
+        self.expect(TokenType.RPAREN)
+        self.expect(TokenType.LBRACE)
+        
+        then_body = []
+        while self.current_token().type != TokenType.RBRACE:
+            self.skip_newlines()
+            if self.current_token().type == TokenType.RBRACE:
+                break
+            stmt = self.parse_statement()
+            if stmt:
+                then_body.append(stmt)
+        
+        self.expect(TokenType.RBRACE)
+        
+        else_body = None
+        if self.current_token().type == TokenType.DEFEAT:
+            self.advance()
+            self.expect(TokenType.LBRACE)
+            else_body = []
+            
+            while self.current_token().type != TokenType.RBRACE:
+                self.skip_newlines()
+                if self.current_token().type == TokenType.RBRACE:
+                    break
+                stmt = self.parse_statement()
+                if stmt:
+                    else_body.append(stmt)
+            
+            self.expect(TokenType.RBRACE)
+        
+        return If(condition, then_body, else_body)
+    
+    def parse_return_statement(self) -> Return:
+        self.expect(TokenType.RETURN)
+        value = None
+        if (self.current_token().type != TokenType.NEWLINE and 
+            self.current_token().type != TokenType.EOF):
+            value = self.parse_expression()
+        return Return(value)
+    
+    def parse_expression_statement(self) -> ASTNode:
+        return self.parse_expression()
+    
+    def parse_expression(self) -> ASTNode:
+        return self.parse_comparison()
+    
+    def parse_comparison(self) -> ASTNode:
+        left = self.parse_term()
+        
+        while self.current_token().type in [TokenType.EQUALS, TokenType.GREATER, TokenType.LESS]:
+            op = self.current_token().value
+            self.advance()
+            right = self.parse_term()
+            left = BinaryOp(left, op, right)
+        
+        return left
+    
+    def parse_term(self) -> ASTNode:
+        left = self.parse_factor()
+        
+        while self.current_token().type in [TokenType.PLUS, TokenType.MINUS]:
+            op = self.current_token().value
+            self.advance()
+            right = self.parse_factor()
+            left = BinaryOp(left, op, right)
+        
+        return left
+    
+    def parse_factor(self) -> ASTNode:
+        left = self.parse_primary()
+        
+        while self.current_token().type in [TokenType.MULTIPLY, TokenType.DIVIDE]:
+            op = self.current_token().value
+            self.advance()
+            right = self.parse_primary()
+            left = BinaryOp(left, op, right)
+        
+        return left
+    
+    def parse_primary(self) -> ASTNode:
+        token = self.current_token()
+        
+        if token.type == TokenType.NUMBER:
+            self.advance()
+            value = float(token.value) if '.' in token.value else int(token.value)
+            return Literal(value)
+        
+        elif token.type == TokenType.STRING:
+            self.advance()
+            return Literal(token.value)
+        
+        elif token.type == TokenType.REAL:
+            self.advance()
+            return Literal(True)
+        
+        elif token.type == TokenType.FAKE:
+            self.advance()
+            return Literal(False)
+        
+        elif token.type == TokenType.VOID:
+            self.advance()
+            return Literal(None)
+        
+        elif token.type == TokenType.IDENTIFIER:
+            name = token.value
+            self.advance()
+            
+            if self.current_token().type == TokenType.LPAREN:
+                # Function call
+                self.advance()
+                args = []
+                
+                if self.current_token().type != TokenType.RPAREN:
+                    args.append(self.parse_expression())
+                    while self.current_token().type == TokenType.COMMA:
+                        self.advance()
+                        args.append(self.parse_expression())
+                
+                self.expect(TokenType.RPAREN)
+                return FunctionCall(name, args)
+            else:
+                return Identifier(name)
+        
+        elif token.type == TokenType.LPAREN:
+            self.advance()
+            expr = self.parse_expression()
+            self.expect(TokenType.RPAREN)
+            return expr
+        
+        elif token.type == TokenType.MINUS:
+            self.advance()
+            operand = self.parse_primary()
+            return UnaryOp('-', operand)
+        
+        else:
+            raise SyntaxError(f"Unexpected token {token.type} at line {token.line}")
+
+class Environment:
+    def __init__(self, parent: Optional['Environment'] = None):
+        self.parent = parent
+        self.variables: Dict[str, Any] = {}
+    
+    def define(self, name: str, value: Any):
+        self.variables[name] = value
+    
+    def get(self, name: str) -> Any:
+        if name in self.variables:
+            return self.variables[name]
+        if self.parent:
+            return self.parent.get(name)
+        raise NameError(f"Undefined variable '{name}'")
+    
+    def set(self, name: str, value: Any):
+        if name in self.variables:
+            self.variables[name] = value
+        elif self.parent:
+            self.parent.set(name, value)
+        else:
+            raise NameError(f"Undefined variable '{name}'")
+
+class RapScriptFunction:
+    def __init__(self, name: str, params: List[str], body: List[ASTNode], closure: Environment):
+        self.name = name
+        self.params = params
+        self.body = body
+        self.closure = closure
+
+class ReturnException(Exception):
+    def __init__(self, value: Any):
+        self.value = value
+
+class Interpreter:
+    def __init__(self):
+        self.globals = Environment()
+        self.environment = self.globals
+        
+        # Built-in functions
+        self.globals.define("flow", self.builtin_flow)
+        self.globals.define("listen", self.builtin_listen)
+    
+    def builtin_flow(self, *args):
+        """Built-in flow function (print)"""
+        output = " ".join(str(arg) for arg in args)
+        print(output)
+        return None
+    
+    def builtin_listen(self):
+        """Built-in listen function (input)"""
+        return input()
+    
+    def interpret(self, program: Program):
+        try:
+            # First pass: define all functions and variables
+            for statement in program.statements:
+                self.execute(statement)
+            
+            # Second pass: execute cypher function if it exists
+            if "cypher" in self.environment.variables:
+                cypher_func = self.environment.get("cypher")
+                if isinstance(cypher_func, RapScriptFunction):
+                    # Execute cypher function
+                    func_env = Environment(cypher_func.closure)
+                    previous_env = self.environment
+                    self.environment = func_env
+                    
+                    try:
+                        for stmt in cypher_func.body:
+                            self.execute(stmt)
+                    except ReturnException as e:
+                        return e.value
+                    finally:
+                        self.environment = previous_env
+            
+        except ReturnException as e:
+            return e.value
+        return None
+    
+    def execute(self, node: ASTNode) -> Any:
+        if isinstance(node, Program):
+            for statement in node.statements:
+                self.execute(statement)
+        
+        elif isinstance(node, VariableDeclaration):
+            value = self.evaluate(node.value)
+            self.environment.define(node.name, value)
+        
+        elif isinstance(node, FunctionDeclaration):
+            func = RapScriptFunction(node.name, node.params, node.body, self.environment)
+            self.environment.define(node.name, func)
+        
+        elif isinstance(node, Assignment):
+            value = self.evaluate(node.value)
+            self.environment.set(node.name, value)
+        
+        elif isinstance(node, If):
+            condition = self.evaluate(node.condition)
+            if self.is_truthy(condition):
+                for stmt in node.then_body:
+                    self.execute(stmt)
+            elif node.else_body:
+                for stmt in node.else_body:
+                    self.execute(stmt)
+        
+        elif isinstance(node, Return):
+            value = None
+            if node.value:
+                value = self.evaluate(node.value)
+            raise ReturnException(value)
+        
+        elif isinstance(node, FunctionCall):
+            return self.evaluate(node)
+        
+        else:
+            return self.evaluate(node)
+    
+    def evaluate(self, node: ASTNode) -> Any:
+        if isinstance(node, Literal):
+            return node.value
+        
+        elif isinstance(node, Identifier):
+            return self.environment.get(node.name)
+        
+        elif isinstance(node, BinaryOp):
+            left = self.evaluate(node.left)
+            right = self.evaluate(node.right)
+            
+            if node.op == '+':
+                return left + right
+            elif node.op == '-':
+                return left - right
+            elif node.op == '*':
+                return left * right
+            elif node.op == '/':
+                if right == 0:
+                    raise ZeroDivisionError("Division by zero")
+                return left / right
+            elif node.op == '==':
+                return left == right
+            elif node.op == '>':
+                return left > right
+            elif node.op == '<':
+                return left < right
+        
+        elif isinstance(node, UnaryOp):
+            operand = self.evaluate(node.operand)
+            if node.op == '-':
+                return -operand
+        
+        elif isinstance(node, FunctionCall):
+            func = self.environment.get(node.name)
+            args = [self.evaluate(arg) for arg in node.args]
+            
+            if callable(func):
+                # Built-in function
+                return func(*args)
+            elif isinstance(func, RapScriptFunction):
+                # User-defined function
+                if len(args) != len(func.params):
+                    raise TypeError(f"Function {func.name} expects {len(func.params)} arguments, got {len(args)}")
+                
+                # Create new environment for function execution
+                func_env = Environment(func.closure)
+                for param, arg in zip(func.params, args):
+                    func_env.define(param, arg)
+                
+                # Execute function body
+                previous_env = self.environment
+                self.environment = func_env
+                
+                try:
+                    for stmt in func.body:
+                        self.execute(stmt)
+                    return None
+                except ReturnException as e:
+                    return e.value
+                finally:
+                    self.environment = previous_env
+            else:
+                raise TypeError(f"'{node.name}' is not a function")
+        
+        else:
+            raise NotImplementedError(f"Evaluation not implemented for {type(node)}")
+    
+    def is_truthy(self, value: Any) -> bool:
+        if value is None or value is False:
+            return False
+        if isinstance(value, (int, float)) and value == 0:
+            return False
+        if isinstance(value, str) and value == "":
+            return False
+        return True
+
+def run_rapscript(code: str):
+    """Main function to run RapScript code"""
+    try:
+        # Lexical analysis
+        lexer = Lexer(code)
+        tokens = lexer.tokenize()
+        
+        # Parsing
+        parser = Parser(tokens)
+        ast = parser.parse()
+        
+        # Interpretation
+        interpreter = Interpreter()
+        interpreter.interpret(ast)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+
+# Example usage
+if __name__ == "__main__":
+    # Example RapScript program
+    sample_code = '''
+    cypher {
+        spit greeting = "Yo, what's good?"
+        flow greeting
+        
+        spit name = "Eminem"
+        spit age = 51
+        
+        flow "Rapper:", name, "Age:", age
+        
+        battle (age > 50) {
+            flow "Veteran in the game!"
+        } defeat {
+            flow "Young blood!"
+        }
+    }
+    '''
+    
+    print("Running RapScript interpreter...")
+    print("=" * 40)
+    run_rapscript(sample_code)
