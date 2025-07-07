@@ -761,25 +761,39 @@ def run_rapscript(code: str):
 
 # Example usage
 if __name__ == "__main__":
-    # Example RapScript program
-    sample_code = '''
-    cypher {
-        spit greeting = "Yo, what's good?"
-        flow greeting
-        
-        spit name = "Eminem"
-        spit age = 51
-        
-        flow "Rapper:", name, "Age:", age
-        
-        battle (age > 50) {
-            flow "Veteran in the game!"
-        } defeat {
-            flow "Young blood!"
+    if len(sys.argv) == 2:
+        # Read from file
+        filename = sys.argv[1]
+        try:
+            with open(filename, 'r') as f:
+                code = f.read()
+            run_rapscript(code)
+        except FileNotFoundError:
+            print(f"Error: File '{filename}' not found")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error reading file: {e}")
+            sys.exit(1)
+    else:
+        # Run example code
+        sample_code = '''
+        cypher {
+            spit greeting = "Yo, what's good?"
+            flow greeting
+            
+            spit name = "Eminem"
+            spit age = 51
+            
+            flow "Rapper:", name, "Age:", age
+            
+            battle (age > 50) {
+                flow "Veteran in the game!"
+            } defeat {
+                flow "Young blood!"
+            }
         }
-    }
-    '''
-    
-    print("Running RapScript interpreter...")
-    print("=" * 40)
-    run_rapscript(sample_code)
+        '''
+        
+        print("Running RapScript interpreter...")
+        print("=" * 40)
+        run_rapscript(sample_code)
