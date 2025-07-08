@@ -1,4 +1,4 @@
-# RapScript Interpreter
+![RapScript](https://github.com/user-attachments/assets/a461c1f8-bb3c-42bc-ba45-1f49755f312d)
 
 A Python-based interpreter for RapScript, a programming language inspired by Eminem's rap style and hip-hop culture.
 
